@@ -4,7 +4,6 @@ import fs from 'fs/promises';
 import child_process from 'child_process';
 import path from 'path';
 import glob from 'glob';
-import * as diff from 'diff';
 import dotenv from 'dotenv';
 import 'colors';
 const exec = util.promisify(child_process.exec);
@@ -197,18 +196,6 @@ async function getStudentDeliveryFiles(student: Student, delivery: Delivery, ext
     return glob.sync(path.resolve(getStudentDeliveryFolder(student, delivery), '**', `*.${extension}`));
 }
 
-/*function getLine(text: string, chunk: string) {
-    const index = text.indexOf(chunk);
-    let characters = 0;
-    let lineIndex = 0;
-    const lines = text.split(/\r?\n/);
-    while (lineIndex < lines.length && characters + lines[lineIndex].length < index) {
-        characters += lines[lineIndex].length;
-        lineIndex++;
-    }
-    return index + 1;
-}*/
-
 /***
  * Runs a copy test on two different students' deliveries of the same delivery.
  */
@@ -239,10 +226,14 @@ async function copyTest({
                         console.log(`${relativeCopyingPath.red} ${'||'.yellow} ${relativeCopiedPath.red}`);
                         for (const change of await compareFiles(copyingStudentFile, copiedStudentFile)) {
                             const isSingleLine = change.left.startIndex === change.left.endIndex;
+                            const isExact = (
+                                change.left.startIndex === change.right.startIndex &&
+                                change.left.endIndex === change.right.endIndex
+                            );
                             console.log([
                                 isSingleLine ? 'line '.blue : 'lines '.blue,
                                 isSingleLine
-                                    ? change.left.startIndex + 1
+                                    ? String(change.left.startIndex + 1).blue
                                     : [
                                         String(change.left.startIndex + 1).blue,
                                         ' --> ',
@@ -251,12 +242,14 @@ async function copyTest({
                                 ' ============================= '.yellow,
                                 isSingleLine ? 'line '.blue : 'lines '.blue,
                                 isSingleLine
-                                    ? change.right.startIndex + 1
+                                    ? String(change.right.startIndex + 1).blue
                                     : [
                                         String(change.right.startIndex + 1).blue,
                                         ' --> ',
                                         String(change.right.endIndex + 1).blue,
                                     ].join(''),
+                                ' ',
+                                isExact ? 'EXACT'.bgCyan : ''
                             ].join(''));
                             console.log(change.lines.join('\n') + '\n');
                         };
