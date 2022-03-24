@@ -63,11 +63,13 @@ async function updateDelivery(
 async function compareFiles(file1: string, file2: string) {
     const contents1 = await fs.readFile(file1);
     const contents2 = await fs.readFile(file2);
-    for (const part of diff.diffTrimmedLines(contents1.toString(), contents2.toString())) {
-        if (!part.added && !part.removed) {
-            console.log(part.value);
-        }
-    }
+    return diff.diffLines(contents1.toString(), contents2.toString(), {
+        ignoreWhitespace: false,
+        newlineIsToken: false,
+    })
+        .sort((diff1, diff2) => {
+            return diff2.value.length - diff1.value.length;
+        });
 }
 
 async function exists(path: string) {
@@ -110,6 +112,18 @@ async function getStudentDeliveryFiles(student: Student, delivery: Delivery, ext
     return glob.sync(path.resolve(getStudentDeliveryFolder(student, delivery), '**', `*.${extension}`));
 }
 
+function getLine(text: string, chunk: string) {
+    const index = text.indexOf(chunk);
+    let characters = 0;
+    let lineIndex = 0;
+    const lines = text.split(/\r?\n/);
+    while (lineIndex < lines.length && characters + lines[lineIndex].length < index) {
+        characters += lines[lineIndex].length;
+        lineIndex++;
+    }
+    return index + 1;
+}
+
 /***
  * Runs a copy test on two different students' deliveries of the same delivery.
  */
@@ -121,6 +135,7 @@ async function copyTest({
     for (let i = 0; i < students.length; i++) {
         await syncronizeStudentDelivery(students[i], delivery);
     }
+    console.log('\n');
     for (let i = 0; i < students.length; i++) {
         for (let j = i + 1; j < students.length; j++) {
             for (const type of ['js', 'html', 'css']) {
@@ -136,8 +151,17 @@ async function copyTest({
                             getStudentDeliveryFolder(copiedStudent, delivery),
                             copiedStudent.githubId
                         );
-                        console.log(`Comparing ${relativeCopyingPath} with ${relativeCopiedPath}`.red);
-                        await compareFiles(copyingStudentFile, copiedStudentFile);
+                        console.log(`${relativeCopyingPath.red} ${'||'.yellow} ${relativeCopiedPath.red}`);
+                        for (const change of await compareFiles(copyingStudentFile, copiedStudentFile)) {
+                            if (!change.added && !change.removed) {
+                                const copyingStudentText = await fs.readFile(copyingStudentFile, 'utf-8');
+                                const copiedStudentText = await fs.readFile(copiedStudentFile, 'utf-8');
+                                const copyingStudentLine = getLine(copyingStudentText, change.value)
+                                const copiedStudentLine = getLine(copiedStudentText, change.value)
+                                console.log(`${'line'.blue} ${String(copyingStudentLine).blue} ${'============================='.yellow} ${'line'.blue} ${String(copiedStudentLine).red}`);
+                                console.log(change.value, '\n');
+                            }
+                        };
                     }
                 }
             }
