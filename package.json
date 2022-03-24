@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "npm run build && ./dist/index.js SimonePavone97 Selenejpg js-our-team"
+    "start": "npm run build && ./dist/index.js js-our-team SimonePavone97 sertech89 Selenejpg"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@types/diff": "^5.0.2",
+    "colors": "^1.4.0",
     "diff": "^5.0.0",
     "dotenv": "^16.0.0",
     "glob": "^7.2.0",

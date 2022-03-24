@@ -2,11 +2,11 @@
 import util from 'util';
 import fs from 'fs/promises';
 import child_process from 'child_process';
-import moment from 'moment';
 import path from 'path';
 import glob from 'glob';
 import * as diff from 'diff';
 import dotenv from 'dotenv';
+import 'colors';
 const exec = util.promisify(child_process.exec);
 
 interface Student {
@@ -16,8 +16,7 @@ interface Student {
 type Delivery = string;
 
 interface CopyTestOptions {
-    copiedStudent: Student;
-    copyingStudent: Student;
+    students: Student[];
     delivery: Delivery;
 }
 
@@ -27,20 +26,26 @@ function getStudentFolder(
     return path.resolve(process.env.DATA!, 'students', student.githubId);
 }
 
-function getDeliveryFolder(
+function getStudentDeliveriesFolder(
+    student: Student,
+) {
+    return path.resolve(getStudentFolder(student), 'deliveries');
+}
+
+function getStudentDeliveryFolder(
     student: Student,
     delivery: Delivery,
 ) {
-    return path.resolve(getStudentFolder(student), delivery);
+    return path.resolve(getStudentDeliveriesFolder(student), delivery);
 }
 
 async function cloneRepo(
     student: Student,
     delivery: Delivery,
 ) {
-    const folder = getStudentFolder(student);
+    const folder = getStudentDeliveriesFolder(student);
     await fs.mkdir(folder, { recursive: true });
-    console.log(`Cloning ${delivery} ${student.githubId}`);
+    console.log(`Cloning ${delivery} ${student.githubId}`.green);
     const command = `git -C ${folder} clone https://github.com/${student.githubId}/${delivery}.git`;
     await exec(command);
 }
@@ -49,16 +54,16 @@ async function updateDelivery(
     student: Student,
     delivery: Delivery,
 ) {
-    const folder = getDeliveryFolder(student, delivery);
-    console.log(`Pulling ${delivery} ${student.githubId}`);
+    const folder = getStudentDeliveryFolder(student, delivery);
+    console.log(`Pulling ${delivery} ${student.githubId}`.green);
     const command = `git -C ${folder} pull`;
     await exec(command);
 }
 
-async function confrontFiles(file1: string, file2: string) {
+async function compareFiles(file1: string, file2: string) {
     const contents1 = await fs.readFile(file1);
     const contents2 = await fs.readFile(file2);
-    for (const part of diff.diffLines(contents1.toString(), contents2.toString())) {
+    for (const part of diff.diffTrimmedLines(contents1.toString(), contents2.toString())) {
         if (!part.added && !part.removed) {
             console.log(part.value);
         }
@@ -75,7 +80,7 @@ async function exists(path: string) {
 }
 
 async function inspectDelivery(student: Student, delivery: Delivery) {
-    const deliveryPath = getDeliveryFolder(student, delivery);
+    const deliveryPath = getStudentDeliveryFolder(student, delivery);
     return {
         exists: await exists(deliveryPath),
         isGitRepo: await isGitRepo(deliveryPath),
@@ -101,35 +106,41 @@ async function syncronizeStudentDelivery(student: Student, delivery: Delivery) {
     }
 }
 
+async function getStudentDeliveryFiles(student: Student, delivery: Delivery, extension: string) {
+    return glob.sync(path.resolve(getStudentDeliveryFolder(student, delivery), '**', `*.${extension}`));
+}
+
 /***
  * Runs a copy test on two different students' deliveries of the same delivery.
  */
 async function copyTest({
-    copiedStudent,
-    copyingStudent,
+    students,
     delivery,
 }: CopyTestOptions) {
     dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
-    const timestamp = moment().format('DD-MM-YYYY_HH-MM-SS');
-    const baseTestFolder = path.resolve(process.env.DATA!, 'copy-tests', `${copyingStudent.githubId}-${copiedStudent.githubId}`);
-    const clonesFolder = path.resolve(baseTestFolder, 'clones');
-    const copyingStudentFolder = path.resolve(clonesFolder, copyingStudent.githubId);
-    const copiedStudentFolder = path.resolve(clonesFolder, copiedStudent.githubId);
-    await fs.mkdir(copyingStudentFolder, { recursive: true });
-    await fs.mkdir(copiedStudentFolder, { recursive: true });
-    await syncronizeStudentDelivery(
-        copyingStudent,
-        delivery,
-    );
-    await syncronizeStudentDelivery(
-        copiedStudent,
-        delivery,
-    );
-    const copyingStudentFiles = glob.sync(path.resolve(copyingStudentFolder, '**', '*.html'));
-    const copiedStudentFiles = glob.sync(path.resolve(copiedStudentFolder, '**', '*.html'));
-    for (const copyingStudentFile of copyingStudentFiles) {
-        for (const copiedStudentFile of copiedStudentFiles) {
-            await confrontFiles(copyingStudentFile, copiedStudentFile);
+    for (let i = 0; i < students.length; i++) {
+        await syncronizeStudentDelivery(students[i], delivery);
+    }
+    for (let i = 0; i < students.length; i++) {
+        for (let j = i + 1; j < students.length; j++) {
+            for (const type of ['js', 'html', 'css']) {
+                const copyingStudent = students[i];
+                const copiedStudent = students[j];
+                for (const copyingStudentFile of await getStudentDeliveryFiles(copyingStudent, delivery, type)) {
+                    for (const copiedStudentFile of await getStudentDeliveryFiles(copiedStudent, delivery, type)) {
+                        const relativeCopyingPath = copyingStudentFile.replace(
+                            getStudentDeliveryFolder(copyingStudent, delivery),
+                            copyingStudent.githubId
+                        );
+                        const relativeCopiedPath = copiedStudentFile.replace(
+                            getStudentDeliveryFolder(copiedStudent, delivery),
+                            copiedStudent.githubId
+                        );
+                        console.log(`Comparing ${relativeCopyingPath} with ${relativeCopiedPath}`.red);
+                        await compareFiles(copyingStudentFile, copiedStudentFile);
+                    }
+                }
+            }
         }
     }
 }
@@ -137,13 +148,8 @@ async function copyTest({
 (async() => {
     try {
         await copyTest({
-            copyingStudent: {
-                githubId: process.argv[2],
-            },
-            copiedStudent: {
-                githubId: process.argv[3],
-            },
-            delivery: process.argv[4]
+            delivery: process.argv[2],
+            students: process.argv.slice(3).map(githubId => ({ githubId })),
         });
     } catch(error) {
         console.error(error);
