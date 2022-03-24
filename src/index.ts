@@ -60,15 +60,100 @@ async function updateDelivery(
     await exec(command);
 }
 
+interface Range {
+    startIndex: number;
+    endIndex: number;
+}
+
+interface Match {
+    left: Range;
+    right: Range;
+    lines: string[];
+}
+
+function getLines(text: string) {
+    return text.split(/\r?\n/);
+}
+
+function contains(range1: Range, range2: Range) {
+    return range1.endIndex >= range2.endIndex && range1.startIndex <= range2.startIndex;
+}
+
+function isIncluded(match1: Match, match2: Match) {
+    return contains(match2.left, match1.left) && contains(match2.right, match1.right);
+}
+
+function getDifferentCharacters(word: string) {
+    return word.split('').reduce((total, char, index, characters) => {
+        return characters.slice(0, index).some(character => character === char)
+            ? total
+            : total + 1;
+    }, 0);
+}
+
+function isOverlapping(match1: Match, match2: Match) {
+    return ((
+            match1.left.endIndex === match2.left.endIndex &&
+            match1.left.startIndex === match2.left.startIndex
+        ) || (
+            match1.right.endIndex === match2.right.endIndex &&
+            match1.right.startIndex === match2.right.startIndex
+        )
+    );
+}
+
 async function compareFiles(file1: string, file2: string) {
-    const contents1 = await fs.readFile(file1);
-    const contents2 = await fs.readFile(file2);
-    return diff.diffLines(contents1.toString(), contents2.toString(), {
-        ignoreWhitespace: false,
-        newlineIsToken: false,
-    })
+    const contents1 = getLines(await fs.readFile(file1, 'utf-8'));
+    const contents2 = getLines(await fs.readFile(file2, 'utf-8'));
+    const matches: Match[] = [];
+    for (let i = 0; i < contents1.length; i++) {
+        for (let j = 0; j < contents2.length; j++) {
+            if (contents1[i] === contents2[j]) {
+                let match: Match = {
+                    left: {
+                        startIndex: i,
+                        endIndex: i,
+                    },
+                    right: {
+                        startIndex: j,
+                        endIndex: j,
+                    },
+                    lines: [
+                        contents1[i],
+                    ],
+                };
+                for (let ti = i + 1, tj = j + 1; ti < contents1.length && tj < contents2.length; ti++, tj++) {
+                    if (contents1[ti] === contents2[tj]) {
+                        match.left.endIndex = ti;
+                        match.right.endIndex = tj;
+                        match.lines.push(contents1[ti]);
+                    } else {
+                        break;
+                    }
+                }
+                matches.push(match);
+            }
+        }
+    }
+    return matches
+        .filter((match, index, array) => (
+            match.lines.length !== 0 &&
+            match.lines.some(line => line !== '') && (
+                match.lines.length > 2 ||
+                getDifferentCharacters(match.lines[0]) >= 3
+            ) &&
+            !array.some(otherMatch => otherMatch !== match && isOverlapping(match, otherMatch))
+        ))
+        .reduce((matches, match) => {
+            const notIncluded = matches.filter(previousMatch => !isIncluded(previousMatch, match));
+            return notIncluded.concat(
+                notIncluded.some(notIncludedMatch => isIncluded(match, notIncludedMatch))
+                    ? []
+                    : [match]
+            );
+        }, [] as Match[])
         .sort((diff1, diff2) => {
-            return diff2.value.length - diff1.value.length;
+            return diff2.lines.length - diff1.lines.length;
         });
 }
 
@@ -112,7 +197,7 @@ async function getStudentDeliveryFiles(student: Student, delivery: Delivery, ext
     return glob.sync(path.resolve(getStudentDeliveryFolder(student, delivery), '**', `*.${extension}`));
 }
 
-function getLine(text: string, chunk: string) {
+/*function getLine(text: string, chunk: string) {
     const index = text.indexOf(chunk);
     let characters = 0;
     let lineIndex = 0;
@@ -122,7 +207,7 @@ function getLine(text: string, chunk: string) {
         lineIndex++;
     }
     return index + 1;
-}
+}*/
 
 /***
  * Runs a copy test on two different students' deliveries of the same delivery.
@@ -153,14 +238,27 @@ async function copyTest({
                         );
                         console.log(`${relativeCopyingPath.red} ${'||'.yellow} ${relativeCopiedPath.red}`);
                         for (const change of await compareFiles(copyingStudentFile, copiedStudentFile)) {
-                            if (!change.added && !change.removed) {
-                                const copyingStudentText = await fs.readFile(copyingStudentFile, 'utf-8');
-                                const copiedStudentText = await fs.readFile(copiedStudentFile, 'utf-8');
-                                const copyingStudentLine = getLine(copyingStudentText, change.value)
-                                const copiedStudentLine = getLine(copiedStudentText, change.value)
-                                console.log(`${'line'.blue} ${String(copyingStudentLine).blue} ${'============================='.yellow} ${'line'.blue} ${String(copiedStudentLine).red}`);
-                                console.log(change.value, '\n');
-                            }
+                            const isSingleLine = change.left.startIndex === change.left.endIndex;
+                            console.log([
+                                isSingleLine ? 'line '.blue : 'lines '.blue,
+                                isSingleLine
+                                    ? change.left.startIndex + 1
+                                    : [
+                                        String(change.left.startIndex + 1).blue,
+                                        ' --> ',
+                                        String(change.left.endIndex + 1).blue,
+                                    ].join(''),
+                                ' ============================= '.yellow,
+                                isSingleLine ? 'line '.blue : 'lines '.blue,
+                                isSingleLine
+                                    ? change.right.startIndex + 1
+                                    : [
+                                        String(change.right.startIndex + 1).blue,
+                                        ' --> ',
+                                        String(change.right.endIndex + 1).blue,
+                                    ].join(''),
+                            ].join(''));
+                            console.log(change.lines.join('\n') + '\n');
                         };
                     }
                 }
