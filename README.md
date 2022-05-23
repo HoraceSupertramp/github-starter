@@ -1,4 +1,4 @@
-# Boolean Utils
+# Utils
 
 A small set of everyday life utilities to interact with certain types of Github hosted public projects
 
