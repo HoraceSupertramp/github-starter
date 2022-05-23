@@ -2,11 +2,16 @@
   "name": "utils",
   "version": "1.0.0",
   "description": "",
-  "bin": "./dist/index.js",
+  "bin": {
+      "github-starter": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "npm run build && ./dist/index.js -r laravel-primi-passi -s Ivztoz8 start --laravel"
   },
+  "files": [
+      "dist"
+  ],
   "keywords": [],
   "author": "",
   "license": "ISC",
