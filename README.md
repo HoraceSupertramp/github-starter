@@ -1,12 +1,12 @@
-# Utils
+# github-starter
 
 A small set of everyday life utilities to interact with certain types of Github hosted public projects
 
-# Install
+# install
 
-npm install -g https://github.com/HoraceSupertramp/utils.git
+npm install -g https://github.com/HoraceSupertramp/github-starter.git
 
-# Usage
+# usage
 
 ```repo-utils [github_options] [command]```
 
@@ -32,7 +32,7 @@ where
 >> - ```php artisan key:generate``` (if needed)
 >> - ```php artisan serve```
 
-# Examples
+# examples
 
 Clones this same repo and tries to run it as a laravel project (don't do this, it does not work).
 
