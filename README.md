@@ -14,7 +14,7 @@ where
 
 ## [options]
 
-> ```-h, --help``` Display usage<br>
+```-h, --help``` Display usage<br>
 ```-u, --user``` Github username<br>
 ```-r, --repo``` Repo name (must be a public<br>repo)
 
@@ -26,11 +26,11 @@ where
 >
 >#### [options]
 >
->>```--run``` Runs some commands after the repo has been cloned. Multiple commands must be specified with ```&&```<br>
->>```--laravel``` Runs, in sequence:<br>
->> - ```composer install```
->> - ```php artisan key:generate``` (if needed)
->> - ```php artisan serve```
+>```--run``` Runs some commands after the repo has been cloned. Multiple commands must be specified with ```&&```<br>
+>```--laravel``` Runs, in sequence:<br>
+> - ```composer install```
+> - ```php artisan key:generate``` (if needed)
+> - ```php artisan serve```
 
 # examples
 
