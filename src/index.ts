@@ -1,162 +1,19 @@
 #!/usr/bin/env node
 import util from 'util';
 import fs from 'fs/promises';
-import child_process from 'child_process';
+import child_process, { spawn } from 'child_process';
 import path from 'path';
-import glob from 'glob';
-import dotenv from 'dotenv';
+import * as envfile from 'envfile';
+import { Command } from 'commander';
 import 'colors';
+
 const exec = util.promisify(child_process.exec);
 
-interface Student {
-    githubId: string;
+interface Config {
+    data: string;
 }
 
-type Delivery = string;
-
-interface CopyTestOptions {
-    students: Student[];
-    delivery: Delivery;
-}
-
-function getStudentFolder(
-    student: Student,
-) {
-    return path.resolve(process.env.DATA!, 'students', student.githubId);
-}
-
-function getStudentDeliveriesFolder(
-    student: Student,
-) {
-    return path.resolve(getStudentFolder(student), 'deliveries');
-}
-
-function getStudentDeliveryFolder(
-    student: Student,
-    delivery: Delivery,
-) {
-    return path.resolve(getStudentDeliveriesFolder(student), delivery);
-}
-
-async function cloneRepo(
-    student: Student,
-    delivery: Delivery,
-) {
-    const folder = getStudentDeliveriesFolder(student);
-    await fs.mkdir(folder, { recursive: true });
-    console.log(`Cloning ${delivery} ${student.githubId}`.green);
-    const command = `git -C ${folder} clone https://github.com/${student.githubId}/${delivery}.git`;
-    await exec(command);
-}
-
-async function updateDelivery(
-    student: Student,
-    delivery: Delivery,
-) {
-    const folder = getStudentDeliveryFolder(student, delivery);
-    console.log(`Pulling ${delivery} ${student.githubId}`.green);
-    const command = `git -C ${folder} pull`;
-    await exec(command);
-}
-
-interface Range {
-    startIndex: number;
-    endIndex: number;
-}
-
-interface Match {
-    left: Range;
-    right: Range;
-    lines: string[];
-}
-
-function getLines(text: string) {
-    return text.split(/\r?\n/);
-}
-
-function contains(range1: Range, range2: Range) {
-    return range1.endIndex >= range2.endIndex && range1.startIndex <= range2.startIndex;
-}
-
-function isIncluded(match1: Match, match2: Match) {
-    return contains(match2.left, match1.left) && contains(match2.right, match1.right);
-}
-
-function getDifferentCharacters(word: string) {
-    return word.split('').reduce((total, char, index, characters) => {
-        return characters.slice(0, index).some(character => character === char)
-            ? total
-            : total + 1;
-    }, 0);
-}
-
-function isOverlapping(match1: Match, match2: Match) {
-    return ((
-            match1.left.endIndex === match2.left.endIndex &&
-            match1.left.startIndex === match2.left.startIndex
-        ) || (
-            match1.right.endIndex === match2.right.endIndex &&
-            match1.right.startIndex === match2.right.startIndex
-        )
-    );
-}
-
-async function compareFiles(file1: string, file2: string) {
-    const contents1 = getLines(await fs.readFile(file1, 'utf-8'));
-    const contents2 = getLines(await fs.readFile(file2, 'utf-8'));
-    const matches: Match[] = [];
-    for (let i = 0; i < contents1.length; i++) {
-        for (let j = 0; j < contents2.length; j++) {
-            if (contents1[i] === contents2[j]) {
-                let match: Match = {
-                    left: {
-                        startIndex: i,
-                        endIndex: i,
-                    },
-                    right: {
-                        startIndex: j,
-                        endIndex: j,
-                    },
-                    lines: [
-                        contents1[i],
-                    ],
-                };
-                for (let ti = i + 1, tj = j + 1; ti < contents1.length && tj < contents2.length; ti++, tj++) {
-                    if (contents1[ti] === contents2[tj]) {
-                        match.left.endIndex = ti;
-                        match.right.endIndex = tj;
-                        match.lines.push(contents1[ti]);
-                    } else {
-                        break;
-                    }
-                }
-                matches.push(match);
-            }
-        }
-    }
-    return matches
-        .filter((match, index, array) => (
-            match.lines.length !== 0 &&
-            match.lines.some(line => line !== '') && (
-                match.lines.length > 2 ||
-                getDifferentCharacters(match.lines[0]) >= 3
-            ) &&
-            !array.some(otherMatch => otherMatch !== match && isOverlapping(match, otherMatch))
-        ))
-        .reduce((matches, match) => {
-            const notIncluded = matches.filter(previousMatch => !isIncluded(previousMatch, match));
-            return notIncluded.concat(
-                notIncluded.some(notIncludedMatch => isIncluded(match, notIncludedMatch))
-                    ? []
-                    : [match]
-            );
-        }, [] as Match[])
-        .sort((diff1, diff2) => {
-            return diff2.lines.length - diff1.lines.length;
-        });
-}
-
-async function exists(path: string) {
+async function pathExists(path: string) {
     try {
         await fs.access(path);
         return true;
@@ -165,107 +22,157 @@ async function exists(path: string) {
     }
 }
 
-async function inspectDelivery(student: Student, delivery: Delivery) {
-    const deliveryPath = getStudentDeliveryFolder(student, delivery);
+function getStudentPath(student: string, config: Config) {
+    return path.resolve(config.data, 'students', student);
+}
+
+function getDeliveriesPath(student: string, config: Config) {
+    return path.resolve(getStudentPath(student, config), 'deliveries');
+}
+
+function getDeliveryPath(student: string, delivery: string, config: Config) {
+    return path.resolve(getDeliveriesPath(student, config), delivery);
+}
+
+async function cloneDelivery(student: string, delivery: string, config: Config) {
+    const folder = getDeliveriesPath(student, config);
+    console.log(`Cloning ${delivery} ${student}`.green);
+    await fs.mkdir(folder, { recursive: true });
+    const command = `git -C ${folder} clone https://github.com/${student}/${delivery}.git`;
+    await exec(command);
+}
+
+async function updateDelivery(student: string, delivery: string, config: Config) {
+    const folder = getDeliveryPath(student, delivery, config);
+    console.log(`Pulling ${delivery} ${student}`.green);
+    const command = `git -C ${folder} pull`;
+    await exec(command);
+}
+
+async function inspectDelivery(student: string, delivery: string, config: Config) {
+    const deliveryPath = getDeliveryPath(student, delivery, config);
     return {
-        exists: await exists(deliveryPath),
-        isGitRepo: await isGitRepo(deliveryPath),
+        exists: await pathExists(deliveryPath),
+        isGitRepo: await pathExists(path.resolve(deliveryPath, '.git')),
     };
 }
 
-async function isGitRepo(folder: string) {
-    return await exists(path.resolve(folder, '.git'));
-}
-
-async function syncronizeStudentDelivery(student: Student, delivery: Delivery) {
-    const deliveryPath = path.resolve(process.env.DATA!, 'students', student.githubId, delivery);
-    const deliveryFolder = await inspectDelivery(student, delivery);
+async function syncronizeDelivery(student: string, delivery: string, config: Config) {
+    const deliveryPath = path.resolve(config.data, 'students', student, delivery);
+    const deliveryFolder = await inspectDelivery(student, delivery, config);
     if (deliveryFolder.exists) {
         if (deliveryFolder.isGitRepo) {
-            await updateDelivery(student, delivery);
+            await updateDelivery(student, delivery, config);
         } else {
             await fs.rm(deliveryPath, { recursive: true, force: true });
-            await cloneRepo(student, delivery);
+            await cloneDelivery(student, delivery, config);
         }
     } else {
-        await cloneRepo(student, delivery);
+        await cloneDelivery(student, delivery, config);
     }
 }
 
-async function getStudentDeliveryFiles(student: Student, delivery: Delivery, extension: string) {
-    return glob.sync(path.resolve(getStudentDeliveryFolder(student, delivery), '**', `*.${extension}`));
+async function runCommand(command: string, folder: string, pipe: boolean) {
+    return new Promise<void>((resolve, reject) => {
+        const child = spawn(command.split(' ')[0], command.split(' ').slice(1), {
+            cwd: folder,
+            stdio: pipe ? 'inherit' : 'ignore'
+        });
+        child.on('error', () => {
+            reject();
+        });
+        child.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(code);
+        });
+    });
 }
 
-/***
- * Runs a copy test on two different students' deliveries of the same delivery.
- */
-async function copyTest({
-    students,
-    delivery,
-}: CopyTestOptions) {
-    dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
-    for (let i = 0; i < students.length; i++) {
-        await syncronizeStudentDelivery(students[i], delivery);
-    }
-    console.log('\n');
-    for (let i = 0; i < students.length; i++) {
-        for (let j = i + 1; j < students.length; j++) {
-            for (const type of ['js', 'html', 'css']) {
-                const copyingStudent = students[i];
-                const copiedStudent = students[j];
-                for (const copyingStudentFile of await getStudentDeliveryFiles(copyingStudent, delivery, type)) {
-                    for (const copiedStudentFile of await getStudentDeliveryFiles(copiedStudent, delivery, type)) {
-                        const relativeCopyingPath = copyingStudentFile.replace(
-                            getStudentDeliveryFolder(copyingStudent, delivery),
-                            copyingStudent.githubId
-                        );
-                        const relativeCopiedPath = copiedStudentFile.replace(
-                            getStudentDeliveryFolder(copiedStudent, delivery),
-                            copiedStudent.githubId
-                        );
-                        console.log(`${relativeCopyingPath.red} ${'||'.yellow} ${relativeCopiedPath.red}`);
-                        for (const change of await compareFiles(copyingStudentFile, copiedStudentFile)) {
-                            const isSingleLine = change.left.startIndex === change.left.endIndex;
-                            const isExact = (
-                                change.left.startIndex === change.right.startIndex &&
-                                change.left.endIndex === change.right.endIndex
-                            );
-                            console.log([
-                                isSingleLine ? 'line '.blue : 'lines '.blue,
-                                isSingleLine
-                                    ? String(change.left.startIndex + 1).blue
-                                    : [
-                                        String(change.left.startIndex + 1).blue,
-                                        ' --> ',
-                                        String(change.left.endIndex + 1).blue,
-                                    ].join(''),
-                                ' ============================= '.yellow,
-                                isSingleLine ? 'line '.blue : 'lines '.blue,
-                                isSingleLine
-                                    ? String(change.right.startIndex + 1).blue
-                                    : [
-                                        String(change.right.startIndex + 1).blue,
-                                        ' --> ',
-                                        String(change.right.endIndex + 1).blue,
-                                    ].join(''),
-                                ' ',
-                                isExact ? 'EXACT'.bgCyan : ''
-                            ].join(''));
-                            console.log(change.lines.join('\n') + '\n');
-                        };
-                    }
-                }
-            }
-        }
-    }
+interface GlobalOptions {
+    student: string;
+    repo: string;
+    npm: boolean;
+    data?: string;
+}
+
+interface RunOptions {
+    vue?: boolean;
+    laravel?: boolean;
+    run?: string;
 }
 
 (async() => {
     try {
-        await copyTest({
-            delivery: process.argv[2],
-            students: process.argv.slice(3).map(githubId => ({ githubId })),
-        });
+        const program = new Command();
+        program.requiredOption('-r, --repo <repo>');
+        program.requiredOption('-s, --student <github_id>');
+        program.option('-d, --data <path>');
+        program.command('start')
+            .description('clone one student\'s delivery and run a command within it')
+            .option('--laravel')
+            .option('--vue')
+            .option('-r, --run <commands>')
+            .action(async ({
+                vue = false,
+                laravel = false,
+                run: userCommands
+            }: RunOptions) => {
+                try {
+                    const {
+                        student,
+                        repo,
+                        data = path.resolve(__dirname, '..', 'data'),
+                    } = program.opts() as GlobalOptions;
+                    const config: Config = { data };
+                    const delivery = getDeliveryPath(student, repo, config);
+                    await syncronizeDelivery(student, repo, config);
+                    const commands = userCommands 
+                        ? userCommands
+                            .split('&&')
+                            .map((command) => command.trim())
+                        : [];
+                    if (laravel) {
+                        const dotenvExample = path.resolve(delivery, '.env.example');
+                        const dotenv = path.resolve(delivery, '.env');
+                        if (await pathExists(dotenvExample)) {
+                            await fs.copyFile(dotenvExample, dotenv);
+                        }
+                        await runCommand(
+                            'composer install',
+                            delivery,
+                            true
+                        );
+                        for (const command of commands) {
+                            await runCommand(
+                                command,
+                                delivery,
+                                true
+                            );
+                        }
+                        if (await pathExists(dotenv)) {
+                            const contents = envfile.parse(await fs.readFile(dotenv, 'utf-8'));
+                            if (contents['APP_KEY'] == null || contents['APP_KEY'] === '') {
+                                await runCommand(
+                                    'php artisan key:generate',
+                                    delivery,
+                                    true
+                                );
+                            }
+                        }
+                        await runCommand(
+                            'php artisan serve',
+                            delivery,
+                            true
+                        );
+                    }
+                } catch(error) {
+                    console.error('An error occurred', error);
+                    process.exit(1);
+                }
+            });
+        program.showHelpAfterError();
+        await program.parseAsync(process.argv);
+        
     } catch(error) {
         console.error(error);
         process.exit(1);

@@ -1,11 +1,11 @@
 {
-  "name": "@boolean/detect-copies",
+  "name": "boolean-utils",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "npm run build && ./dist/index.js js-our-team SimonePavone97 sertech89 Selenejpg"
+    "start": "npm run build && ./dist/index.js -r laravel-primi-passi -s Ivztoz8 start --laravel"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "colors": "^1.4.0",
-    "dotenv": "^16.0.0",
+    "commander": "^9.2.0",
+    "envfile": "^6.17.0",
     "glob": "^7.2.0",
     "moment": "^2.29.1"
   }
