@@ -4,7 +4,8 @@ A small set of everyday life utilities to interact with certain types of Github 
 
 # install
 
-npm install -g https://github.com/HoraceSupertramp/github-starter.git
+- ```git clone https://github.com/HoraceSupertramp/github-starter.git```
+ - ```npm link```
 
 # usage
 

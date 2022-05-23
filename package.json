@@ -2,9 +2,7 @@
   "name": "github-starter",
   "version": "1.0.0",
   "description": "",
-  "bin": {
-      "github-starter": "./dist/index.js"
-  },
+  "bin": "./dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "npm run build && ./dist/index.js -r laravel-primi-passi -s Ivztoz8 start --laravel"
