@@ -28,6 +28,7 @@ where
 >#### [options]
 >
 >```--run``` Runs some commands after the repo has been cloned. Multiple commands must be specified with ```&&```<br>
+>```--scope <path>``` The subpath inside the repo where the actual project is located<br>
 >```--laravel``` Runs, in sequence:<br>
 > - ```composer install```
 > - ```php artisan key:generate``` (if needed)

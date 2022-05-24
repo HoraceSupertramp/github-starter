@@ -2,16 +2,16 @@
 import util from 'util';
 import fs from 'fs/promises';
 import child_process from 'child_process';
-import path, { resolve } from 'path';
+import path from 'path';
 import * as envfile from 'envfile';
 import { Command } from 'commander';
 import 'colors';
-import { rejects } from 'assert';
 
 const exec = util.promisify(child_process.exec);
 
 interface Config {
     data: string;
+    projectScope?: string;
 }
 
 async function pathExists(path: string) {
@@ -73,8 +73,16 @@ async function syncronizeRepo(user: string, repo: string, config: Config) {
     }
 }
 
-async function runCommand(command: string, folder: string) {
+async function runCommand(command: string, user: string, repo: string, config: Config) {
     return new Promise<void>((resolve, reject) => {
+        const pathParts = [
+            getRepoPath(user, repo, config)
+        ].concat(
+            config.projectScope != null
+                ? [config.projectScope]
+                : []
+        );
+        const folder = path.resolve(...pathParts);
         const child = child_process.spawn(command.split(' ')[0], command.split(' ').slice(1), {
             cwd: folder,
             stdio: 'inherit'
@@ -90,12 +98,20 @@ async function runCommand(command: string, folder: string) {
     });
 }
 
-async function runParallelCommands(commands: string[], folder: string) {
+async function runParallelCommands(commands: string[], user: string, repo: string, config: Config) {
     for (const command of commands) {
         console.log(`Running ${command}`.yellow);
     }
     return new Promise<void>((resolve, reject) => {
         let closed = 0;
+        const pathParts = [
+            getRepoPath(user, repo, config)
+        ].concat(
+            config.projectScope != null
+                ? [config.projectScope]
+                : []
+        );
+        const folder = path.resolve(...pathParts);
         const children = commands.map((command, index, commands) =>
             child_process.spawn(command.split(' ')[0], command.split(' ').slice(1), {
                 cwd: folder,
@@ -132,10 +148,11 @@ interface GlobalOptions {
     data?: string;
 }
 
-interface RunOptions {
+interface StartOptions {
     vue?: boolean;
     laravel?: boolean;
     run?: string;
+    scope?: string;
 }
 
 (async() => {
@@ -149,21 +166,26 @@ interface RunOptions {
             .option('--laravel')
             .option('--vue')
             .option('-r, --run <commands>')
+            .option('-s, --scope <path>')
             .action(async ({
                 vue = false,
                 laravel = false,
-                run: userCommands
-            }: RunOptions) => {
+                run: userCommands,
+                scope,
+            }: StartOptions) => {
                 try {
                     const {
                         user,
                         repo: name,
                         data = path.resolve(__dirname, '..', 'data'),
                     } = program.opts() as GlobalOptions;
-                    const config: Config = { data };
-                    const repo = getRepoPath(user, name, config);
+                    const config: Config = {
+                        data,
+                        projectScope: scope,
+                    };
                     await syncronizeRepo(user, name, config);
-                    const commands = userCommands 
+                    const repo = path.resolve(getRepoPath(user, name, config));
+                    const commands = userCommands
                         ? userCommands
                             .split('&&')
                             .map((command) => command.trim())
@@ -174,21 +196,21 @@ interface RunOptions {
                         if (await pathExists(dotenvExample)) {
                             await fs.copyFile(dotenvExample, dotenv);
                         }
-                        await runCommand('composer install', repo);
-                        await runCommand('npm install', repo);
+                        await runCommand('composer install', user, name, config);
+                        await runCommand('npm install', user, name, config);
                         if (await pathExists(dotenv)) {
                             const contents = envfile.parse(await fs.readFile(dotenv, 'utf-8'));
                             if (contents['APP_KEY'] == null || contents['APP_KEY'] === '') {
-                                await runCommand('php artisan key:generate', repo);
+                                await runCommand('php artisan key:generate', user, name, config);
                             }
                         }
                         for (const command of commands) {
-                            await runCommand(command, repo);
+                            await runCommand(command, user, name, config);
                         }
                         await runParallelCommands([
                             'npm run watch',
                             'php artisan serve'
-                        ], repo);
+                        ], user, name, config);
                     }
                 } catch(error) {
                     console.error('An error occurred', error);

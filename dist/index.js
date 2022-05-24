@@ -108,9 +108,15 @@ function syncronizeRepo(user, repo, config) {
         }
     });
 }
-function runCommand(command, folder) {
+function runCommand(command, user, repo, config) {
     return __awaiter(this, void 0, void 0, function* () {
         return new Promise((resolve, reject) => {
+            const pathParts = [
+                getRepoPath(user, repo, config)
+            ].concat(config.projectScope != null
+                ? [config.projectScope]
+                : []);
+            const folder = path_1.default.resolve(...pathParts);
             const child = child_process_1.default.spawn(command.split(' ')[0], command.split(' ').slice(1), {
                 cwd: folder,
                 stdio: 'inherit'
@@ -127,13 +133,19 @@ function runCommand(command, folder) {
         });
     });
 }
-function runParallelCommands(commands, folder) {
+function runParallelCommands(commands, user, repo, config) {
     return __awaiter(this, void 0, void 0, function* () {
         for (const command of commands) {
             console.log(`Running ${command}`.yellow);
         }
         return new Promise((resolve, reject) => {
             let closed = 0;
+            const pathParts = [
+                getRepoPath(user, repo, config)
+            ].concat(config.projectScope != null
+                ? [config.projectScope]
+                : []);
+            const folder = path_1.default.resolve(...pathParts);
             const children = commands.map((command, index, commands) => child_process_1.default.spawn(command.split(' ')[0], command.split(' ').slice(1), {
                 cwd: folder,
                 stdio: index === commands.length - 1
@@ -172,12 +184,16 @@ function runParallelCommands(commands, folder) {
             .option('--laravel')
             .option('--vue')
             .option('-r, --run <commands>')
-            .action(({ vue = false, laravel = false, run: userCommands }) => __awaiter(void 0, void 0, void 0, function* () {
+            .option('-s, --scope <path>')
+            .action(({ vue = false, laravel = false, run: userCommands, scope, }) => __awaiter(void 0, void 0, void 0, function* () {
             try {
                 const { user, repo: name, data = path_1.default.resolve(__dirname, '..', 'data'), } = program.opts();
-                const config = { data };
-                const repo = getRepoPath(user, name, config);
+                const config = {
+                    data,
+                    projectScope: scope,
+                };
                 yield syncronizeRepo(user, name, config);
+                const repo = path_1.default.resolve(getRepoPath(user, name, config));
                 const commands = userCommands
                     ? userCommands
                         .split('&&')
@@ -189,21 +205,21 @@ function runParallelCommands(commands, folder) {
                     if (yield pathExists(dotenvExample)) {
                         yield promises_1.default.copyFile(dotenvExample, dotenv);
                     }
-                    yield runCommand('composer install', repo);
-                    yield runCommand('npm install', repo);
+                    yield runCommand('composer install', user, name, config);
+                    yield runCommand('npm install', user, name, config);
                     if (yield pathExists(dotenv)) {
                         const contents = envfile.parse(yield promises_1.default.readFile(dotenv, 'utf-8'));
                         if (contents['APP_KEY'] == null || contents['APP_KEY'] === '') {
-                            yield runCommand('php artisan key:generate', repo);
+                            yield runCommand('php artisan key:generate', user, name, config);
                         }
                     }
                     for (const command of commands) {
-                        yield runCommand(command, repo);
+                        yield runCommand(command, user, name, config);
                     }
                     yield runParallelCommands([
                         'npm run watch',
                         'php artisan serve'
-                    ], repo);
+                    ], user, name, config);
                 }
             }
             catch (error) {
