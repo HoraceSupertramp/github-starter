@@ -1,6 +1,6 @@
 # github-starter
 
-A small set of everyday life utilities to interact with certain types of Github hosted public projects.
+A small set of everyday life utilities to automatize the interactions with certain types of Github hosted public projects.
 
 # install
 
@@ -33,8 +33,8 @@ where
 > - runs ```composer install```.
 > - runs ```npm install```.
 > - renames ```.env.example``` to ```.env``` if the former exists.
-> - ensures APP_DEBUG=true in .env file if the latter exists.
-> - runs ```php artisan generate:key``` if .env exists and APP_KEY is not defined in it.
+> - ensures ```APP_DEBUG=true``` in ```.env``` if the latter exists.
+> - runs ```php artisan generate:key``` if ```.env``` exists and ```APP_KEY``` is not defined in it.
 > - runs ```php artisan serve``` and ```npm run watch``` in parallel.
 
 # examples
