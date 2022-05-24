@@ -38,7 +38,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const util_1 = __importDefault(require("util"));
 const promises_1 = __importDefault(require("fs/promises"));
-const child_process_1 = __importStar(require("child_process"));
+const child_process_1 = __importDefault(require("child_process"));
 const path_1 = __importDefault(require("path"));
 const envfile = __importStar(require("envfile"));
 const commander_1 = require("commander");
@@ -59,7 +59,7 @@ function getUsersPath(user, config) {
     return path_1.default.resolve(config.data, 'users', user);
 }
 function getReposPath(user, config) {
-    return path_1.default.resolve(getUsersPath(user, config), 'deliveries');
+    return path_1.default.resolve(getUsersPath(user, config), 'repos');
 }
 function getRepoPath(user, name, config) {
     return path_1.default.resolve(getReposPath(user, config), name);
@@ -108,22 +108,56 @@ function syncronizeRepo(user, repo, config) {
         }
     });
 }
-function runCommand(command, folder, pipe) {
+function runCommand(command, folder) {
     return __awaiter(this, void 0, void 0, function* () {
         return new Promise((resolve, reject) => {
-            const child = (0, child_process_1.spawn)(command.split(' ')[0], command.split(' ').slice(1), {
+            const child = child_process_1.default.spawn(command.split(' ')[0], command.split(' ').slice(1), {
                 cwd: folder,
-                stdio: pipe ? 'inherit' : 'ignore'
+                stdio: 'inherit'
             });
-            child.on('error', () => {
-                reject();
-            });
+            child.on('error', reject);
             child.on('close', (code) => {
-                if (code === 0)
+                if (code != 0) {
+                    reject(new Error(`Running ${command}\nExit code ${code}`));
+                }
+                else {
                     resolve();
-                else
-                    reject(code);
+                }
             });
+        });
+    });
+}
+function runParallelCommands(commands, folder) {
+    return __awaiter(this, void 0, void 0, function* () {
+        for (const command of commands) {
+            console.log(`Running ${command}`.yellow);
+        }
+        return new Promise((resolve, reject) => {
+            let closed = 0;
+            const children = commands.map((command, index, commands) => child_process_1.default.spawn(command.split(' ')[0], command.split(' ').slice(1), {
+                cwd: folder,
+                stdio: index === commands.length - 1
+                    ? 'inherit'
+                    : 'ignore'
+            }));
+            const error = (failure) => {
+                for (const child of children) {
+                    if (child != failure) {
+                        child.kill();
+                    }
+                }
+                reject();
+            };
+            const close = () => {
+                closed++;
+                if (closed === children.length) {
+                    resolve();
+                }
+            };
+            for (const child of children) {
+                child.on('close', close);
+                child.on('error', () => error(child));
+            }
         });
     });
 }
@@ -143,7 +177,7 @@ function runCommand(command, folder, pipe) {
                 const { user, repo: name, data = path_1.default.resolve(__dirname, '..', 'data'), } = program.opts();
                 const config = { data };
                 const repo = getRepoPath(user, name, config);
-                yield syncronizeRepo(user, repo, config);
+                yield syncronizeRepo(user, name, config);
                 const commands = userCommands
                     ? userCommands
                         .split('&&')
@@ -155,17 +189,21 @@ function runCommand(command, folder, pipe) {
                     if (yield pathExists(dotenvExample)) {
                         yield promises_1.default.copyFile(dotenvExample, dotenv);
                     }
-                    yield runCommand('composer install', repo, true);
+                    yield runCommand('composer install', repo);
+                    yield runCommand('npm install', repo);
                     if (yield pathExists(dotenv)) {
                         const contents = envfile.parse(yield promises_1.default.readFile(dotenv, 'utf-8'));
                         if (contents['APP_KEY'] == null || contents['APP_KEY'] === '') {
-                            yield runCommand('php artisan key:generate', repo, true);
+                            yield runCommand('php artisan key:generate', repo);
                         }
                     }
                     for (const command of commands) {
-                        yield runCommand(command, repo, true);
+                        yield runCommand(command, repo);
                     }
-                    yield runCommand('php artisan serve', repo, true);
+                    yield runParallelCommands([
+                        'npm run watch',
+                        'php artisan serve'
+                    ], repo);
                 }
             }
             catch (error) {

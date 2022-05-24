@@ -5,7 +5,7 @@
   "bin": "./dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "npm run build && ./dist/index.js -r laravel-primi-passi -s Ivztoz8 start --laravel"
+    "start": "npm run build && ./dist/index.js -r laravel-primi-passi -u simoneluca00 start --laravel"
   },
   "files": [
       "dist"
