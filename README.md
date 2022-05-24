@@ -28,7 +28,7 @@ where
 >#### [options]
 >
 >```--scope <path>``` The subpath inside the repo where the actual project is located.<br>
-> The following options are mutually exclusive.
+> *The following options are mutually exclusive.*<br>
 >```--run``` Runs some custom commands after the repo has been cloned. Multiple commands must be specified with ```&&```.<br>
 >```--laravel``` Executes a preset of commands to start a Laravel project inside the cloned repo:<br>
 > - runs ```composer install```.
