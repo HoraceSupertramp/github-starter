@@ -29,7 +29,7 @@ where
 >
 >```--run``` Runs some commands after the repo has been cloned. Multiple commands must be specified with ```&&```.<br>
 >```--scope <path>``` The subpath inside the repo where the actual project is located.<br>
->```--laravel``` In sequence:<br>
+>```--laravel``` Executes a preset of commands to start a Laravel project inside the cloned repo:<br>
 > - runs ```composer install```.
 > - runs ```npm install```.
 > - renames ```.env.example``` to ```.env``` if the former exists.
