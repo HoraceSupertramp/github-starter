@@ -64,6 +64,12 @@ function getReposPath(user, config) {
 function getRepoPath(user, name, config) {
     return path_1.default.resolve(getReposPath(user, config), name);
 }
+function getProjectFolder(user, name, config) {
+    if (config.projectScope != null) {
+        return path_1.default.resolve(getRepoPath(user, name, config), config.projectScope);
+    }
+    return getRepoPath(user, name, config);
+}
 function cloneRepo(user, repo, config) {
     return __awaiter(this, void 0, void 0, function* () {
         const folder = getReposPath(user, config);
@@ -111,12 +117,7 @@ function syncronizeRepo(user, repo, config) {
 function runCommand(command, user, repo, config) {
     return __awaiter(this, void 0, void 0, function* () {
         return new Promise((resolve, reject) => {
-            const pathParts = [
-                getRepoPath(user, repo, config)
-            ].concat(config.projectScope != null
-                ? [config.projectScope]
-                : []);
-            const folder = path_1.default.resolve(...pathParts);
+            const folder = getProjectFolder(user, repo, config);
             const child = child_process_1.default.spawn(command.split(' ')[0], command.split(' ').slice(1), {
                 cwd: folder,
                 stdio: 'inherit'
@@ -140,12 +141,7 @@ function runParallelCommands(commands, user, repo, config) {
         }
         return new Promise((resolve, reject) => {
             let closed = 0;
-            const pathParts = [
-                getRepoPath(user, repo, config)
-            ].concat(config.projectScope != null
-                ? [config.projectScope]
-                : []);
-            const folder = path_1.default.resolve(...pathParts);
+            const folder = getProjectFolder(user, repo, config);
             const children = commands.map((command, index, commands) => child_process_1.default.spawn(command.split(' ')[0], command.split(' ').slice(1), {
                 cwd: folder,
                 stdio: index === commands.length - 1
@@ -200,8 +196,9 @@ function runParallelCommands(commands, user, repo, config) {
                         .map((command) => command.trim())
                     : [];
                 if (laravel) {
-                    const dotenvExample = path_1.default.resolve(repo, '.env.example');
-                    const dotenv = path_1.default.resolve(repo, '.env');
+                    const project = getProjectFolder(user, repo, config);
+                    const dotenvExample = path_1.default.resolve(project, '.env.example');
+                    const dotenv = path_1.default.resolve(project, '.env');
                     if (yield pathExists(dotenvExample)) {
                         yield promises_1.default.copyFile(dotenvExample, dotenv);
                     }
@@ -209,6 +206,10 @@ function runParallelCommands(commands, user, repo, config) {
                     yield runCommand('npm install', user, name, config);
                     if (yield pathExists(dotenv)) {
                         const contents = envfile.parse(yield promises_1.default.readFile(dotenv, 'utf-8'));
+                        if (contents['APP_DEBUG'] !== 'true') {
+                            contents['APP_DEBUG'] = 'true';
+                            yield promises_1.default.writeFile(dotenv, envfile.stringify(contents));
+                        }
                         if (contents['APP_KEY'] == null || contents['APP_KEY'] === '') {
                             yield runCommand('php artisan key:generate', user, name, config);
                         }

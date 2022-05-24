@@ -1,6 +1,6 @@
 # github-starter
 
-A small set of everyday life utilities to interact with certain types of Github hosted public projects
+A small set of everyday life utilities to interact with certain types of Github hosted public projects.
 
 # install
 
@@ -15,9 +15,9 @@ where
 
 ## [options]
 
-```-h, --help``` Display usage<br>
-```-u, --user``` Github username<br>
-```-r, --repo``` Repo name (must be a public<br>repo)
+```-h, --help``` Display usage.<br>
+```-u, --user``` Github username.<br>
+```-r, --repo``` Repo name (must be a public<br>repo).
 
 ## [command]
 
@@ -27,12 +27,15 @@ where
 >
 >#### [options]
 >
->```--run``` Runs some commands after the repo has been cloned. Multiple commands must be specified with ```&&```<br>
->```--scope <path>``` The subpath inside the repo where the actual project is located<br>
->```--laravel``` Runs, in sequence:<br>
-> - ```composer install```
-> - ```php artisan key:generate``` (if needed)
-> - ```php artisan serve```
+>```--run``` Runs some commands after the repo has been cloned. Multiple commands must be specified with ```&&```.<br>
+>```--scope <path>``` The subpath inside the repo where the actual project is located.<br>
+>```--laravel``` In sequence:<br>
+> - runs ```composer install```.
+> - runs ```npm install```.
+> - renames ```.env.example``` to ```.env``` if the former exists.
+> - ensures APP_DEBUG=true in .env file if the latter exists.
+> - runs ```php artisan generate:key``` if .env exists and APP_KEY is not defined in it.
+> - runs ```php artisan serve``` and ```npm run watch``` in parallel.
 
 # examples
 

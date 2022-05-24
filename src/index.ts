@@ -35,6 +35,13 @@ function getRepoPath(user: string, name: string, config: Config) {
     return path.resolve(getReposPath(user, config), name);
 }
 
+function getProjectFolder(user: string, name: string, config: Config) {
+    if (config.projectScope != null) {
+        return path.resolve(getRepoPath(user, name, config), config.projectScope);
+    }
+    return getRepoPath(user, name, config);
+}
+
 async function cloneRepo(user: string, repo: string, config: Config) {
     const folder = getReposPath(user, config);
     console.log(`Cloning ${repo} ${user}`.green);
@@ -75,14 +82,7 @@ async function syncronizeRepo(user: string, repo: string, config: Config) {
 
 async function runCommand(command: string, user: string, repo: string, config: Config) {
     return new Promise<void>((resolve, reject) => {
-        const pathParts = [
-            getRepoPath(user, repo, config)
-        ].concat(
-            config.projectScope != null
-                ? [config.projectScope]
-                : []
-        );
-        const folder = path.resolve(...pathParts);
+        const folder = getProjectFolder(user, repo, config);
         const child = child_process.spawn(command.split(' ')[0], command.split(' ').slice(1), {
             cwd: folder,
             stdio: 'inherit'
@@ -104,14 +104,7 @@ async function runParallelCommands(commands: string[], user: string, repo: strin
     }
     return new Promise<void>((resolve, reject) => {
         let closed = 0;
-        const pathParts = [
-            getRepoPath(user, repo, config)
-        ].concat(
-            config.projectScope != null
-                ? [config.projectScope]
-                : []
-        );
-        const folder = path.resolve(...pathParts);
+        const folder = getProjectFolder(user, repo, config);
         const children = commands.map((command, index, commands) =>
             child_process.spawn(command.split(' ')[0], command.split(' ').slice(1), {
                 cwd: folder,
@@ -191,8 +184,9 @@ interface StartOptions {
                             .map((command) => command.trim())
                         : [];
                     if (laravel) {
-                        const dotenvExample = path.resolve(repo, '.env.example');
-                        const dotenv = path.resolve(repo, '.env');
+                        const project = getProjectFolder(user, repo, config);
+                        const dotenvExample = path.resolve(project, '.env.example');
+                        const dotenv = path.resolve(project, '.env');
                         if (await pathExists(dotenvExample)) {
                             await fs.copyFile(dotenvExample, dotenv);
                         }
@@ -200,6 +194,10 @@ interface StartOptions {
                         await runCommand('npm install', user, name, config);
                         if (await pathExists(dotenv)) {
                             const contents = envfile.parse(await fs.readFile(dotenv, 'utf-8'));
+                            if (contents['APP_DEBUG'] !== 'true') {
+                                contents['APP_DEBUG'] = 'true';
+                                await fs.writeFile(dotenv, envfile.stringify(contents));
+                            }
                             if (contents['APP_KEY'] == null || contents['APP_KEY'] === '') {
                                 await runCommand('php artisan key:generate', user, name, config);
                             }
